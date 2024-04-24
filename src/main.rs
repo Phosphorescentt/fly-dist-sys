@@ -47,6 +47,7 @@ async fn process(buf: Vec<u8>, state: StateArc) -> std::io::Result<Message> {
     let body: MessageBody = match message.body.message_type {
         MessageType::Init => process_init(&message.body, state),
         MessageType::Echo => process_echo(&message.body, state),
+        MessageType::Generate => process_generate(&message.body, state),
         _ => unimplemented!(),
     };
 
@@ -84,6 +85,30 @@ fn process_echo(body: &MessageBody, state: StateArc) -> MessageBody {
         msg_id: Some(msg_id),
         in_reply_to: body.msg_id,
         echo: body.echo.clone(),
+        ..Default::default()
+    };
+}
+
+fn process_generate(body: &MessageBody, state: StateArc) -> MessageBody {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let mut state = state.lock().unwrap();
+    let msg_id = state.as_mut().unwrap().get_and_increment_message_id();
+
+    let node_id = state.as_ref().unwrap().node_id.clone();
+    let time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_micros()
+        .to_string();
+
+    let id_string = node_id + "-" + time.as_str();
+
+    return MessageBody {
+        message_type: MessageType::GenerateOk,
+        msg_id: Some(msg_id),
+        in_reply_to: body.msg_id,
+        id: Some(id_string),
         ..Default::default()
     };
 }
