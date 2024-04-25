@@ -37,17 +37,21 @@ async fn main() -> std::io::Result<()> {
             handle.write_all(chars)
         });
     }
-    return Ok(());
 }
 
 async fn process(buf: Vec<u8>, state: StateArc) -> std::io::Result<Message> {
     let s = std::str::from_utf8(&buf).unwrap();
     let message: Message = serde_json::from_str(&s).unwrap();
 
-    let body: MessageBody = match message.body.message_type {
-        MessageType::Init => process_init(&message.body, state),
-        MessageType::Echo => process_echo(&message.body, state),
-        MessageType::Generate => process_generate(&message.body, state),
+    let mut state = state.lock().unwrap();
+    let response_body: MessageBody = match message.body.message_type {
+        // Why does thist first one not need unwrapping?
+        MessageType::Init => process_init(&message.body, &mut state),
+        MessageType::Echo => process_echo(&message.body, &mut state),
+        MessageType::Generate => process_generate(&message.body, &mut state),
+        MessageType::Broadcast => process_broadcast(&message.body, &mut state),
+        MessageType::Read => process_read(&message.body, &state),
+        MessageType::Topology => process_topology(&message.body, &mut state),
         _ => unimplemented!(),
     };
 
@@ -56,13 +60,12 @@ async fn process(buf: Vec<u8>, state: StateArc) -> std::io::Result<Message> {
         // state.node_id?
         src: message.dst,
         dst: message.src,
-        body,
+        body: response_body,
     });
 }
 
-fn process_init(body: &MessageBody, state: StateArc) -> MessageBody {
+fn process_init(body: &MessageBody, state: &mut Option<State>) -> MessageBody {
     // NB: This will reset the state every time we recieve an `init` message.
-    let mut state = state.lock().unwrap();
     let _ = state.insert(State::from((
         body.node_id.clone().unwrap(),
         body.node_ids.clone().unwrap(),
@@ -77,8 +80,7 @@ fn process_init(body: &MessageBody, state: StateArc) -> MessageBody {
     };
 }
 
-fn process_echo(body: &MessageBody, state: StateArc) -> MessageBody {
-    let mut state = state.lock().unwrap();
+fn process_echo(body: &MessageBody, state: &mut Option<State>) -> MessageBody {
     let msg_id = state.as_mut().unwrap().get_and_increment_message_id();
     return MessageBody {
         message_type: MessageType::EchoOk,
@@ -89,13 +91,12 @@ fn process_echo(body: &MessageBody, state: StateArc) -> MessageBody {
     };
 }
 
-fn process_generate(body: &MessageBody, state: StateArc) -> MessageBody {
+fn process_generate(body: &MessageBody, state: &mut Option<State>) -> MessageBody {
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    let mut state = state.lock().unwrap();
-    let msg_id = state.as_mut().unwrap().get_and_increment_message_id();
-
-    let node_id = state.as_ref().unwrap().node_id.clone();
+    let state = state.as_mut().unwrap();
+    let msg_id = state.get_and_increment_message_id();
+    let node_id = state.node_id.clone();
     let time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -109,6 +110,48 @@ fn process_generate(body: &MessageBody, state: StateArc) -> MessageBody {
         msg_id: Some(msg_id),
         in_reply_to: body.msg_id,
         id: Some(id_string),
+        ..Default::default()
+    };
+}
+
+fn process_broadcast(body: &MessageBody, state: &mut Option<State>) -> MessageBody {
+    state
+        .as_mut()
+        .unwrap()
+        .messages_recieved
+        .push(body.message.unwrap());
+
+    return MessageBody {
+        message_type: MessageType::BroadcastOk,
+        in_reply_to: body.msg_id,
+        ..Default::default()
+    };
+}
+
+fn process_read(body: &MessageBody, state: &Option<State>) -> MessageBody {
+    let state = state.as_ref().expect("No state");
+    eprintln!("state: {:?}", state);
+    let messages = state.messages_recieved.clone();
+    eprintln!("messages: {:?}", messages);
+    return MessageBody {
+        message_type: MessageType::ReadOk,
+        in_reply_to: body.msg_id,
+        messages: Some(messages),
+        ..Default::default()
+    };
+}
+
+fn process_topology(body: &MessageBody, state: &mut Option<State>) -> MessageBody {
+    eprintln!("entering process_topology()");
+    let _ = state
+        .as_mut()
+        .unwrap()
+        .topology
+        .insert(body.topology.clone().unwrap());
+
+    return MessageBody {
+        message_type: MessageType::TopologyOk,
+        in_reply_to: body.msg_id,
         ..Default::default()
     };
 }

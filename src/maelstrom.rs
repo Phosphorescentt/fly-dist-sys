@@ -1,8 +1,12 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
+#[derive(Default, Debug)]
 pub struct State {
     pub node_id: String,
     pub node_ids: Vec<String>,
+    pub topology: Option<HashMap<String, Vec<String>>>,
+    pub messages_recieved: Vec<u64>,
     message_counter: u64,
 }
 
@@ -11,7 +15,7 @@ impl From<(String, Vec<String>)> for State {
         return State {
             node_id: value.0,
             node_ids: value.1,
-            message_counter: 0,
+            ..Default::default()
         };
     }
 }
@@ -40,6 +44,18 @@ pub enum MessageType {
     Generate,
     #[serde(rename = "generate_ok")]
     GenerateOk,
+    #[serde(rename = "broadcast")]
+    Broadcast,
+    #[serde(rename = "broadcast_ok")]
+    BroadcastOk,
+    #[serde(rename = "read")]
+    Read,
+    #[serde(rename = "read_ok")]
+    ReadOk,
+    #[serde(rename = "topology")]
+    Topology,
+    #[serde(rename = "topology_ok")]
+    TopologyOk,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -66,4 +82,10 @@ pub struct MessageBody {
     pub echo: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub messages: Option<Vec<u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topology: Option<HashMap<String, Vec<String>>>,
 }
