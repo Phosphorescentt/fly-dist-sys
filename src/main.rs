@@ -132,14 +132,27 @@ fn process_generate(message: &Message, state: &mut State) -> Vec<Message> {
 }
 
 fn process_broadcast(message: &Message, state: &mut State) -> Vec<Message> {
+    let node_id = state.maelstrom_state.as_ref().unwrap().node_id.clone();
+    let message_value = message.body.message.unwrap();
+    let broadcast_nodes = state
+        .maelstrom_state
+        .as_ref()
+        .unwrap()
+        .topology
+        .as_ref()
+        .unwrap()
+        .get(&node_id)
+        .unwrap()
+        .clone();
+
     state
         .maelstrom_state
         .as_mut()
         .unwrap()
         .messages_recieved
-        .push(message.body.message.unwrap());
+        .push(message_value.clone());
 
-    return vec![Message {
+    let mut messages = vec![Message {
         src: message.dst.clone(),
         dst: message.src.clone(),
         body: MessageBody {
@@ -148,6 +161,20 @@ fn process_broadcast(message: &Message, state: &mut State) -> Vec<Message> {
             ..Default::default()
         },
     }];
+
+    for n in broadcast_nodes.iter() {
+        messages.push(Message {
+            src: node_id.clone(),
+            dst: n.clone(),
+            body: MessageBody {
+                message_type: MessageType::Broadcast,
+                message: Some(message_value.clone()),
+                ..Default::default()
+            },
+        })
+    }
+
+    return messages;
 }
 
 fn process_read(message: &Message, state: &State) -> Vec<Message> {
