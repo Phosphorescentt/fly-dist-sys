@@ -1,8 +1,13 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Stdout, sync::Arc};
+
+pub struct State {
+    pub stdout: Arc<Stdout>,
+    pub maelstrom_state: Option<MaelstromState>,
+}
 
 #[derive(Default, Debug)]
-pub struct State {
+pub struct MaelstromState {
     pub node_id: String,
     pub node_ids: Vec<String>,
     pub topology: Option<HashMap<String, Vec<String>>>,
@@ -10,9 +15,9 @@ pub struct State {
     message_counter: u64,
 }
 
-impl From<(String, Vec<String>)> for State {
+impl From<(String, Vec<String>)> for MaelstromState {
     fn from(value: (String, Vec<String>)) -> Self {
-        return State {
+        return MaelstromState {
             node_id: value.0,
             node_ids: value.1,
             ..Default::default()
@@ -20,7 +25,7 @@ impl From<(String, Vec<String>)> for State {
     }
 }
 
-impl State {
+impl MaelstromState {
     pub fn get_and_increment_message_id(&mut self) -> u64 {
         let current = self.message_counter;
         self.message_counter += 1;
